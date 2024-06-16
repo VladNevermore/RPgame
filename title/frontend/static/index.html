@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Survival Game</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #000;
+            color: #fff;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        .container {
+            max-width: 600px;
+            width: 100%;
+            padding: 20px;
+            border: 1px solid #444;
+            border-radius: 10px;
+            background-color: #222;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+        }
+        .selection, .scenario, .actions, .result {
+            margin-bottom: 20px;
+        }
+        textarea {
+            width: 100%;
+            height: 100px;
+            margin-bottom: 20px;
+            background-color: #333;
+            color: #fff;
+            border: 1px solid #555;
+            resize: none;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #555;
+            color: #fff;
+            border: none;
+            cursor: pointer;
+            margin-right: 10px;
+            border-radius: 5px;
+            transition: background-color 0.3s, transform 0.3s;
+        }
+        button:hover {
+            background-color: #666;
+        }
+        button:active {
+            transform: scale(0.95);
+        }
+        button:disabled {
+            background-color: #444;
+            cursor: not-allowed;
+        }
+        .hidden {
+            display: none;
+        }
+        .word-buttons button {
+            margin: 5px 5px 0 0;
+        }
+        .typing {
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="wordSelection" class="selection">
+            <h2>Выберите слово</h2>
+            <div id="words" class="word-buttons"></div>
+        </div>
+        <div id="scenarioSection" class="scenario hidden">
+            <h2>Сценарий</h2>
+            <p id="scenarioText" class="typing"></p>
+        </div>
+        <div id="actionsSection" class="actions hidden">
+            <textarea id="userActions" placeholder="Опишите ваши действия..."></textarea>
+            <button id="submitActions" onclick="submitActions()">Отправить</button>
+        </div>
+        <div id="resultSection" class="result hidden">
+            <h2>Результат</h2>
+            <p id="result" class="typing"></p>
+            <button onclick="retryScenario()">Попробовать еще раз</button>
+            <button onclick="newGame()">Новая игра</button>
+        </div>
+    </div>
+
+    <script>
+        const wordsList = [
+            ["дерево", "река", "гора", "лес", "пещера", "долина", "поле", "озеро", "берег", "лук"],
+            ["синий", "красный", "зеленый", "желтый", "черный", "белый", "фиолетовый", "оранжевый", "серый", "розовый"],
+            ["Россия", "Франция", "Япония", "Италия", "Китай", "Индия", "Бразилия", "Канада", "Австралия", "Германия"]
+        ];
+
+        let selectedWords = [];
+        let currentStep = 0;
+        let generatedScenario = '';
+
+        function displayWords() {
+            const wordsDiv = document.getElementById('words');
+            wordsDiv.innerHTML = '';
+            wordsList[currentStep].forEach(word => {
+                const wordButton = document.createElement('button');
+                wordButton.textContent = word;
+                wordButton.onclick = () => selectWord(word);
+                wordsDiv.appendChild(wordButton);
+            });
+        }
+
+        function selectWord(word) {
+            selectedWords.push(word);
+            currentStep++;
+            if (currentStep < wordsList.length) {
+                displayWords();
+            } else {
+                showLoadingAnimation();
+                generateScenario();
+            }
+        }
+
+        function showLoadingAnimation() {
+            const wordsDiv = document.getElementById('words');
+            wordsDiv.innerHTML = '<p>Загрузка...</p>';
+        }
+
+        async function generateScenario() {
+            console.log("Selected words:", selectedWords);
+            const response = await fetch('/api/generate_scenario', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ words: selectedWords })
+            });
+            const result = await response.json();
+            console.log("Generated scenario:", result);
+            generatedScenario = result.scenario;
+            document.getElementById('scenarioText').textContent = '';
+            typeText(document.getElementById('scenarioText'), generatedScenario);
+            document.getElementById('wordSelection').classList.add('hidden');
+            document.getElementById('scenarioSection').classList.remove('hidden');
+            document.getElementById('actionsSection').classList.remove('hidden');
+        }
+
+        async function submitActions() {
+            const actions = document.getElementById('userActions').value;
+            console.log("Submitting actions:", actions);
+            if (!actions.trim()) {
+                alert("Пожалуйста, опишите ваши действия.");
+                return;
+            }
+            const submitButton = document.getElementById('submitActions');
+            submitButton.disabled = true;
+            const response = await fetch('/api/process_actions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ scenario: generatedScenario, actions })
+            });
+            submitButton.disabled = false;
+            const result = await response.json();
+            console.log("Response from processing actions:", result);
+            document.getElementById('result').innerText = '';
+            typeText(document.getElementById('result'), result.response);
+            document.getElementById('resultSection').classList.remove('hidden');
+            document.getElementById('actionsSection').classList.add('hidden');
+        }
+
+        function typeText(element, text) {
+            element.innerHTML = '';
+            const words = text.split(' ');
+            words.forEach((word, index) => {
+                const span = document.createElement('span');
+                span.textContent = word + ' ';
+                element.appendChild(span);
+                setTimeout(() => {
+                    span.classList.add('typing');
+                }, index * 100);
+            });
+        }
+
+        function retryScenario() {
+            document.getElementById('userActions').value = '';
+            document.getElementById('resultSection').classList.add('hidden');
+            document.getElementById('actionsSection').classList.remove('hidden');
+        }
+
+        function newGame() {
+            selectedWords = [];
+            currentStep = 0;
+            generatedScenario = '';
+            document.getElementById('userActions').value = '';
+            document.getElementById('resultSection').classList.add('hidden');
+            document.getElementById('scenarioSection').classList.add('hidden');
+            document.getElementById('actionsSection').classList.add('hidden');
+            document.getElementById('wordSelection').classList.remove('hidden');
+            displayWords();
+        }
+
+        displayWords();
+    </script>
+</body>
+</html>

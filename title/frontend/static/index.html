@@ -7,166 +7,151 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            background-color: #121212;
-            color: #FFFFFF;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #f0f0f0;
         }
-        .container {
-            max-width: 600px;
-            margin: 50px auto;
+        #game {
+            width: 80%;
+            max-width: 800px;
+            background-color: white;
             padding: 20px;
-            border: 1px solid #333;
-            border-radius: 10px;
-            background-color: #1E1E1E;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
         }
-        .selection, .scenario, .actions, .result {
-            margin-bottom: 20px;
+        h1 {
+            text-align: center;
         }
-        textarea {
-            width: 100%;
-            height: 100px;
-            margin-bottom: 20px;
-            background-color: #2E2E2E;
-            color: #FFFFFF;
-            border: 1px solid #333;
-            border-radius: 5px;
-            padding: 10px;
-        }
-        button {
+        .word-button {
+            margin: 5px;
             padding: 10px 20px;
-            font-size: 16px;
-            color: #FFFFFF;
-            background-color: #3A3A3A;
-            border: 1px solid #555;
-            border-radius: 5px;
+            background-color: #007BFF;
+            color: white;
+            border: none;
             cursor: pointer;
-            transition: background-color 0.3s;
+            transition: background-color 0.3s ease;
         }
-        button:hover {
-            background-color: #555;
+        .word-button:hover {
+            background-color: #0056b3;
         }
-        button:active {
-            background-color: #777;
+        #selected-words {
+            margin: 20px 0;
+            font-weight: bold;
         }
-        #loading {
+        #scenario {
+            margin: 20px 0;
+            white-space: pre-wrap; /* Preserve line breaks */
+        }
+        #action-input {
+            width: calc(100% - 22px);
+            padding: 10px;
+            margin: 10px 0;
+        }
+        #submit-action {
+            margin: 10px 0;
+            padding: 10px 20px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        #submit-action:hover {
+            background-color: #218838;
+        }
+        .hidden {
             display: none;
-        }
-        .typing {
-            border-right: 2px solid #FFF;
-            animation: blink 0.75s step-end infinite;
-        }
-        @keyframes blink {
-            from, to { border-color: transparent }
-            50% { border-color: #FFF }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div id="wordSelection" class="selection">
-            <h2>Выберите слово</h2>
-            <div id="words"></div>
+    <div id="game">
+        <h1>Survival Game</h1>
+        <div id="word-selection">
+            <button class="word-button">дерево</button>
+            <button class="word-button">серый</button>
+            <button class="word-button">Индия</button>
+            <button class="word-button">Австралия</button>
+            <button class="word-button">лодка</button>
         </div>
-        <div id="scenarioSection" class="scenario">
-            <h2>Сценарий</h2>
-            <p id="scenarioText"></p>
-        </div>
-        <div id="actionsSection" class="actions">
-            <textarea id="userActions" placeholder="Опишите ваши действия..."></textarea>
-            <button onclick="submitActions()">Отправить</button>
-        </div>
-        <div id="resultSection" class="result">
-            <h2>Результат</h2>
-            <p id="result"></p>
-        </div>
-        <div id="loading">Загрузка...</div>
+        <div id="selected-words"></div>
+        <div id="scenario" class="hidden"></div>
+        <input type="text" id="action-input" class="hidden" placeholder="Опишите свои действия">
+        <button id="submit-action" class="hidden">Отправить действия</button>
     </div>
 
     <script>
-        const wordsList = [
-            ["дерево", "река", "гора", "лес", "пещера", "долина", "поле", "озеро", "берег", "лук"],
-            ["синий", "красный", "зеленый", "желтый", "черный", "белый", "фиолетовый", "оранжевый", "серый", "розовый"],
-            ["Россия", "Франция", "Япония", "Италия", "Китай", "Индия", "Бразилия", "Канада", "Австралия", "Германия"]
-        ];
+        const API_URL = 'http://127.0.0.1:5000/api/';
+
+        const wordButtons = document.querySelectorAll('.word-button');
+        const selectedWordsDiv = document.getElementById('selected-words');
+        const scenarioDiv = document.getElementById('scenario');
+        const actionInput = document.getElementById('action-input');
+        const submitActionButton = document.getElementById('submit-action');
 
         let selectedWords = [];
-        let currentStep = 0;
-        let generatedScenario = '';
 
-        function displayWords() {
-            const wordsDiv = document.getElementById('words');
-            wordsDiv.innerHTML = '';
-            wordsList[currentStep].forEach(word => {
-                const wordButton = document.createElement('button');
-                wordButton.textContent = word;
-                wordButton.onclick = () => selectWord(word);
-                wordsDiv.appendChild(wordButton);
-            });
-        }
-
-        function selectWord(word) {
-            selectedWords.push(word);
-            currentStep++;
-            if (currentStep < wordsList.length) {
-                displayWords();
-            } else {
-                generateScenario();
-            }
-        }
+        wordButtons.forEach(button => {
+            button.onclick = () => {
+                if (selectedWords.length < 3) {
+                    selectedWords.push(button.innerText);
+                    button.disabled = true;
+                    selectedWordsDiv.innerText = `Selected words: ${selectedWords.join(', ')}`;
+                    if (selectedWords.length === 3) {
+                        generateScenario();
+                    }
+                }
+            };
+        });
 
         async function generateScenario() {
-            console.log("Selected words:", selectedWords);
-            document.getElementById('loading').style.display = 'block';
-            const response = await fetch('http://127.0.0.1:5000/api/generate_scenario', {  
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ words: selectedWords })
-            });
-            document.getElementById('loading').style.display = 'none';
-            const result = await response.json();
-            console.log("Generated scenario:", result);
-            generatedScenario = result.scenario;
-            typeEffect(document.getElementById('scenarioText'), generatedScenario);
-            document.getElementById('wordSelection').style.display = 'none';
-            document.getElementById('scenarioSection').style.display = 'block';
-            document.getElementById('actionsSection').style.display = 'block';
-        }
-
-        async function submitActions() {
-            const actions = document.getElementById('userActions').value;
-            console.log("Submitting actions:", actions);
-            const response = await fetch('http://127.0.0.1:5000/api/process_actions', {  
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ scenario: generatedScenario, actions })
-            });
-            const result = await response.json();
-            console.log("Response from processing actions:", result);
-            typeEffect(document.getElementById('result'), result.response);
-            document.getElementById('resultSection').style.display = 'block';
-        }
-
-        function typeEffect(element, text) {
-            const typingSpeed = 50;  
-            element.innerHTML = '';
-            let i = 0;
-            function type() {
-                if (i < text.length) {
-                    element.innerHTML += text.charAt(i);
-                    i++;
-                    setTimeout(type, typingSpeed);
-                } else {
-                    element.classList.remove('typing');
+            try {
+                const response = await fetch(`${API_URL}generate_scenario`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ words: selectedWords })
+                });
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
                 }
+                const data = await response.json();
+                scenarioDiv.innerText = data.scenario;
+                scenarioDiv.classList.remove('hidden');
+                actionInput.classList.remove('hidden');
+                submitActionButton.classList.remove('hidden');
+            } catch (error) {
+                console.error('Error generating scenario:', error);
             }
-            element.classList.add('typing');
-            type();
         }
 
-        displayWords();
+        submitActionButton.onclick = async () => {
+            const action = actionInput.value;
+            if (action.trim() === '') {
+                return;
+            }
+            try {
+                const response = await fetch(`${API_URL}process_actions`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ scenario: scenarioDiv.innerText, actions: action })
+                });
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                const data = await response.json();
+                scenarioDiv.innerText += `\n\n${data.response}`;
+                actionInput.value = '';
+            } catch (error) {
+                console.error('Error processing actions:', error);
+            }
+        };
     </script>
 </body>
 </html>

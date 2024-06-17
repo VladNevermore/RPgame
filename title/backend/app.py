@@ -1,60 +1,109 @@
-from flask import Flask, request, jsonify
-import openai
+from flask import Flask, request, jsonify, send_from_directory
+import requests
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder="../frontend/static")
 
-openai.api_key = os.getenv("API_KEY")
+FOLDER_ID = os.getenv("FOLDER_ID")
+API_KEY = os.getenv("API_KEY")
+YANDEX_MODEL_URI = os.getenv("YANDEX_MODEL_URI")
+COMPLETION_URL = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
 
 def generate_summary(prompt):
     headers = {
-        'Content-Type': 'application/json',
-        'Authorization': f'Bearer {openai.api_key}'
+        "Content-Type": "application/json",
+        "Authorization": f"Api-Key {API_KEY}"
     }
-    response = openai.Completion.create(
-        engine="text-davinci-003",
-        prompt=prompt,
-        max_tokens=150
-    )
-    return response.choices[0].text.strip()
+    try:
+        response = requests.post(COMPLETION_URL, headers=headers, json=prompt)
+        response.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        print(f"Request failed: {e}")
+        return None
+    
+    print(f"Yandex GPT Response: {response.status_code}, {response.text}")
+    return response.json()
 
 @app.route('/api/generate_scenario', methods=['POST'])
 def generate_scenario():
-    try:
-        data = request.json
-        words = data['words']
-        app.logger.info(f"Received words: {words}")
-        prompt = (
-            f"Вы играете в игру на выживание. "
-            f"Ваши слова: {', '.join(words)}. "
-            "Опишите сценарий."
-        )
-        result = generate_summary(prompt)
-        return jsonify({'scenario': result})
-    except Exception as e:
-        app.logger.error(f"Error generating scenario: {e}")
-        return jsonify({'error': 'Internal Server Error'}), 500
+    data = request.json
+    selected_words = data['words']
+    print(f"Received words: {selected_words}")
+    prompt = {
+        "modelUri": YANDEX_MODEL_URI,
+        "completionOptions": {
+            "stream": False,
+            "temperature": 0.9,
+            "maxTokens": 500
+        },
+        "messages": [
+            {
+                "role": "system",
+                "text": "Ты талантливый сценарист, который создает захватывающие игровые сценарии для браузерных игр."
+            },
+            {
+                "role": "user",
+                "text": f"Создай короткий сценарий для игры на основе следующих слов: {', '.join(selected_words)}. Включи конкретную задачу для пользователя. Сценарий должен быть кратким, не более 200 слов, и должен содержать конкретные задачи для игрока."
+            }
+        ]
+    }
+    result = generate_summary(prompt)
+    if result is None:
+        return jsonify({"scenario": "Ошибка в генерации сценария."}), 500
+    scenario_text = result.get("result", {}).get("alternatives", [{}])[0].get("message", {}).get("text", "Ошибка в генерации сценария.")
+    
+    print(f"Generated scenario: {scenario_text}")
+    return jsonify({"scenario": scenario_text})
 
 @app.route('/api/process_actions', methods=['POST'])
 def process_actions():
-    try:
-        data = request.json
-        scenario = data['scenario']
-        actions = data['actions']
-        app.logger.info(f"Received actions: {actions} for scenario: {scenario}")
-        prompt = (
-            f"Сценарий: {scenario}\n"
-            f"Ваши действия: {actions}\n"
-            "Опишите результат."
-        )
-        result = generate_summary(prompt)
-        return jsonify({'response': result})
-    except Exception as e:
-        app.logger.error(f"Error processing actions: {e}")
-        return jsonify({'error': 'Internal Server Error'}), 500
+    data = request.json
+    user_scenario = data['scenario']
+    user_actions = data['actions']
+    print(f"Received scenario: {user_scenario}")
+    print(f"Received actions: {user_actions}")
+
+    prompt = {
+        "modelUri": YANDEX_MODEL_URI,
+        "completionOptions": {
+            "stream": False,
+            "temperature": 0.9,
+            "maxTokens": 500
+        },
+        "messages": [
+            {
+                "role": "system",
+                "text": "Ты ассистент дроид, способный помочь в галактических приключениях."
+            },
+            {
+                "role": "user",
+                "text": f"Сценарий: {user_scenario}"
+            },
+            {
+                "role": "user",
+                "text": f"Действия пользователя: {user_actions}"
+            },
+            {
+                "role": "system",
+                "text": "Проанализируй действия пользователя в контексте данного сценария и опиши, к чему они привели. Оцени правильность действий, добавь немного юмора и абсурда. Не включай в текст указания на генерацию или ответственность нейросети."
+            }
+        ]
+    }
+
+    result = generate_summary(prompt)
+    if result is None:
+        return jsonify({"response": "Ошибка в ответе нейросети."}), 500
+    response_text = result.get("result", {}).get("alternatives", [{}])[0].get("message", {}).get("text", "Ошибка в ответе нейросети.")
+    
+    print(f"Generated response: {response_text}")
+    return jsonify({"response": response_text})
+
+@app.route('/')
+def serve_index():
+    return send_from_directory(app.static_folder, 'index.html')
 
 if __name__ == '__main__':
     app.run(debug=True)
